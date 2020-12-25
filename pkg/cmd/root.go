@@ -67,19 +67,21 @@ func walkFiles(cmd *cobra.Command, args []string) {
 		types := []*impl.UnintializedErrorType{}
 		cmap := ast.NewCommentMap(fset, goFile, goFile.Comments)
 		for node, commentGroups := range cmap {
-			relatedComments := []*ast.Comment{}
+			comments := []*ast.Comment{}
+			related := false
 			for _, commentGroup := range commentGroups {
 				for _, comment := range commentGroup.List {
-					if strings.Contains(comment.Text, "+chaos-mesh:error") {
-						relatedComments = append(relatedComments, comment)
+					if strings.Contains(comment.Text, "+thaterror") {
+						related = true
 					}
+					comments = append(comments, comment)
 				}
 			}
 
-			if len(relatedComments) > 0 {
+			if related {
 				errType := &impl.UnintializedErrorType{
 					Node:     node,
-					Comments: relatedComments,
+					Comments: comments,
 				}
 				types = append(types, errType)
 			}

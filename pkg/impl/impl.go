@@ -23,7 +23,9 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
-const errDeclPattern = "+chaos-mesh:error="
+const errDeclPattern = "+thaterror:error="
+const multiLineErrDeclStart = "+thaterror:error:start"
+const multilineErrDeclEnd = "+thaterror:error:stop"
 
 // Pkg generates error related functions for a pkg
 func Pkg(path string, pkgName string, types []*UnintializedErrorType, outputFileName string) {
@@ -51,22 +53,37 @@ func generateTyp(f *jen.File, typ *UnintializedErrorType) {
 		log.Fatal("node is not a *ast.TypeSpec")
 	}
 
-	typName := errType.Name.Name
+	errImpl := &Error{
+		TypeName:      errType.Name.Name,
+		ErrorTemplate: "",
+	}
 
+	multiLineTemplate := false
 	for _, comment := range typ.Comments {
 		comment := comment.Text
-		index := strings.Index(comment, errDeclPattern)
-		if index != -1 {
+		if multiLineTemplate {
+			errImpl.ErrorTemplate += strings.Trim(comment, " /") + "\n"
+		} else if index := strings.Index(comment, errDeclPattern); index != -1 {
 			tmplContent := comment[index+len(errDeclPattern):]
-			generateErrorFunc(f, tmplContent, typName)
+			errImpl.ErrorTemplate = tmplContent
+		} else if strings.Contains(comment, multiLineErrDeclStart) {
+			multiLineTemplate = true
+		} else if strings.Contains(comment, multilineErrDeclEnd) {
+			multiLineTemplate = false
 		}
 	}
+
+	errImpl.impl(f)
 }
 
-func generateErrorFunc(f *jen.File, tmplContent string, typName string) {
-	ptrTypName := "*" + typName
+func (e *Error) impl(f *jen.File) {
+	generateErrorFunc(f, e.ErrorTemplate, e.TypeName)
+}
 
-	tmplName := typName + "ErrorTmpl"
+func generateErrorFunc(f *jen.File, tmplContent string, typeName string) {
+	ptrTypName := "*" + typeName
+
+	tmplName := typeName + "ErrorTmpl"
 	f.Const().Defs(
 		jen.Id(tmplName).Op("=").
 			Qual("template", "Must").Call(

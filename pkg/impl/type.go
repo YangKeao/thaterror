@@ -26,3 +26,9 @@ type UnintializedErrorType struct {
 	Node     ast.Node
 	Comments []*ast.Comment
 }
+
+// Error represents all information about an error type
+type Error struct {
+	TypeName      string
+	ErrorTemplate string
+}
