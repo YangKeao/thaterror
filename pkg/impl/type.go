@@ -31,4 +31,5 @@ type UnintializedErrorType struct {
 type Error struct {
 	TypeName      string
 	ErrorTemplate string
+	Transparent   bool
 }

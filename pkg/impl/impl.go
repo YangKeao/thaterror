@@ -26,6 +26,7 @@ import (
 const errDeclPattern = "+thaterror:error="
 const multiLineErrDeclStart = "+thaterror:error:start"
 const multilineErrDeclEnd = "+thaterror:error:stop"
+const transparentPattern = "+thaterror:transparent"
 
 // Pkg generates error related functions for a pkg
 func Pkg(path string, pkgName string, types []*UnintializedErrorType, outputFileName string) {
@@ -56,6 +57,7 @@ func generateTyp(f *jen.File, typ *UnintializedErrorType) {
 	errImpl := &Error{
 		TypeName:      errType.Name.Name,
 		ErrorTemplate: "",
+		Transparent:   false,
 	}
 
 	multiLineTemplate := false
@@ -70,6 +72,8 @@ func generateTyp(f *jen.File, typ *UnintializedErrorType) {
 			multiLineTemplate = true
 		} else if strings.Contains(comment, multilineErrDeclEnd) {
 			multiLineTemplate = false
+		} else if strings.Contains(comment, transparentPattern) {
+			errImpl.Transparent = true
 		}
 	}
 
@@ -77,18 +81,22 @@ func generateTyp(f *jen.File, typ *UnintializedErrorType) {
 }
 
 func (e *Error) impl(f *jen.File) {
-	generateErrorFunc(f, e.ErrorTemplate, e.TypeName)
+	if e.Transparent {
+		e.generateTransparentErrorFunc(f)
+	} else {
+		e.generateTemplateErrorFunc(f)
+	}
 }
 
-func generateErrorFunc(f *jen.File, tmplContent string, typeName string) {
-	ptrTypName := "*" + typeName
+func (e *Error) generateTemplateErrorFunc(f *jen.File) {
+	ptrTypName := "*" + e.TypeName
 
-	tmplName := typeName + "ErrorTmpl"
+	tmplName := e.TypeName + "ErrorTmpl"
 	f.Const().Defs(
 		jen.Id(tmplName).Op("=").
 			Qual("template", "Must").Call(
 			jen.Qual("template", "New").Call(jen.Lit(tmplName)).
-				Dot("Parse").Call(jen.Lit(tmplContent))),
+				Dot("Parse").Call(jen.Lit(e.ErrorTemplate))),
 	)
 
 	f.Func().Params(
@@ -103,5 +111,14 @@ func generateErrorFunc(f *jen.File, tmplContent string, typeName string) {
 			jen.Panic(jen.Lit("fail to render error template")),
 		),
 		jen.Return(jen.Id("buf").Dot("String").Call()),
+	)
+}
+
+func (e *Error) generateTransparentErrorFunc(f *jen.File) {
+	ptrTypName := "*" + e.TypeName
+	f.Func().Params(
+		jen.Id("err").Id(ptrTypName),
+	).Id("Error").Params().Error().Block(
+		jen.Return(jen.Id("err").Dot("Error").Call()),
 	)
 }
