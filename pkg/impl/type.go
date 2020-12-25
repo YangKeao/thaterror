@@ -15,12 +15,6 @@ package impl
 
 import "go/ast"
 
-// Task represents a generating task
-type Task struct {
-	Types []*UnintializedErrorType
-	Path  string
-}
-
 // UnintializedErrorType represents the raw ast items parsed from file
 type UnintializedErrorType struct {
 	Node     ast.Node

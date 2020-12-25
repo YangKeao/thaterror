@@ -64,6 +64,11 @@ func walkFiles(cmd *cobra.Command, args []string) {
 			log.Fatal(err)
 		}
 
+		importMap := make(map[string]string)
+		for _, impt := range goFile.Imports {
+			importMap[impt.Name.Name] = impt.Path.Value
+		}
+
 		types := []*impl.UnintializedErrorType{}
 		cmap := ast.NewCommentMap(fset, goFile, goFile.Comments)
 		for node, commentGroups := range cmap {
@@ -87,6 +92,6 @@ func walkFiles(cmd *cobra.Command, args []string) {
 			}
 		}
 
-		impl.Pkg(file, goFile.Name.Name, types, outputFileName)
+		impl.Pkg(file, goFile.Name.Name, importMap, types, outputFileName)
 	}
 }

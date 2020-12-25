@@ -29,7 +29,7 @@ const multilineErrDeclEnd = "+thaterror:error:stop"
 const transparentPattern = "+thaterror:transparent"
 
 // Pkg generates error related functions for a pkg
-func Pkg(path string, pkgName string, types []*UnintializedErrorType, outputFileName string) {
+func Pkg(path string, pkgName string, importMap map[string]string, types []*UnintializedErrorType, outputFileName string) {
 	f := jen.NewFile(pkgName)
 
 	for _, typ := range types {
