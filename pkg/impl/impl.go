@@ -21,12 +21,13 @@ import (
 	"strings"
 
 	"github.com/dave/jennifer/jen"
+	"github.com/iancoleman/strcase"
 )
 
 const errDeclPattern = "+thaterror:error="
 const errWrapPattern = "+thaterror:wrap="
 const multiLineErrDeclStart = "+thaterror:error:start"
-const multilineErrDeclEnd = "+thaterror:error:stop"
+const multilineErrDeclEnd = "+thaterror:error:end"
 const transparentPattern = "+thaterror:transparent"
 
 // Pkg generates error related functions for a pkg
@@ -129,7 +130,7 @@ func (e *Error) generateErrorWrap(f *jen.File) {
 		return
 	}
 
-	f.Func().Id(e.TypeName + "Wrap").Params(jen.Id("err").Error()).Id(ptrTypName).Block(
+	f.Func().Id(strcase.ToLowerCamel(e.TypeName) + "Wrap").Params(jen.Id("err").Error()).Id(ptrTypName).Block(
 		jen.Switch(jen.Id("err").Assert(jen.Type())).Block(
 			jen.CaseFunc(
 				e.allWrapTypeCaseFunc(),
