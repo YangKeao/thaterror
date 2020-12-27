@@ -70,7 +70,7 @@ func walkFiles(cmd *cobra.Command, args []string) {
 			relatedComments := []*ast.Comment{}
 			for _, commentGroup := range commentGroups {
 				for _, comment := range commentGroup.List {
-					if strings.Contains(comment.Text, "+chaos-mesh:error") {
+					if strings.Contains(comment.Text, "+thaterror:") {
 						relatedComments = append(relatedComments, comment)
 					}
 				}

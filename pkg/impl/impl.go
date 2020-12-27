@@ -23,7 +23,8 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
-const errDeclPattern = "+chaos-mesh:error="
+const errDeclPattern = "+thaterror:error="
+const errFromPattern = "+thaterror:from="
 
 // Pkg generates error related functions for a pkg
 func Pkg(path string, pkgName string, types []*UnintializedErrorType, outputFileName string) {
@@ -53,14 +54,21 @@ func generateTyp(f *jen.File, typ *UnintializedErrorType) {
 
 	typName := errType.Name.Name
 
+	fromTypes := []string{}
 	for _, comment := range typ.Comments {
 		comment := comment.Text
-		index := strings.Index(comment, errDeclPattern)
-		if index != -1 {
+
+		if index := strings.Index(comment, errDeclPattern); index != -1 {
 			tmplContent := comment[index+len(errDeclPattern):]
 			generateErrorFunc(f, tmplContent, typName)
+		} else if index := strings.Index(comment, errFromPattern); index != -1 {
+			fromType := comment[index+len(errFromPattern):]
+			fromTypes = append(fromTypes, fromType)
 		}
 	}
+
+	generateErrorFrom(f, fromTypes, typName)
+	generateErrorUnwrap(f, fromTypes, typName)
 }
 
 func generateErrorFunc(f *jen.File, tmplContent string, typName string) {
@@ -76,7 +84,7 @@ func generateErrorFunc(f *jen.File, tmplContent string, typName string) {
 
 	f.Func().Params(
 		jen.Id("err").Id(ptrTypName),
-	).Id("Error").Params().Error().Block(
+	).Id("Error").Params().String().Block(
 		jen.Id("buf").Op(":=").Id("new").Call(jen.Qual("bytes", "Buffer")),
 		jen.Id("tmplErr").Op(":=").Id(tmplName).Dot("Execute").Call(
 			jen.Id("buf"),
@@ -86,5 +94,67 @@ func generateErrorFunc(f *jen.File, tmplContent string, typName string) {
 			jen.Panic(jen.Lit("fail to render error template")),
 		),
 		jen.Return(jen.Id("buf").Dot("String").Call()),
+	)
+}
+
+func generateErrorFrom(f *jen.File, fromTypes []string, typName string) {
+	ptrTypName := "*" + typName
+
+	if len(fromTypes) == 0 {
+		return
+	}
+
+	f.Func().Id(typName + "From").Params(jen.Id("err").Error()).Id(ptrTypName).Block(
+		jen.Switch(jen.Id("err").Assert(jen.Type())).Block(
+			jen.CaseFunc(
+				func(g *jen.Group) {
+					for _, typ := range fromTypes {
+						g.Id(typ)
+					}
+				},
+			).Block(
+				jen.Return(
+					jen.Op("&").Id(typName).Values(jen.Dict{
+						jen.Id("Err"): jen.Id("err"),
+					}),
+				),
+			),
+			jen.Default().Block(
+				jen.Panic(jen.Lit("cannot construct error from this type")),
+			),
+		),
+	)
+}
+
+func generateErrorUnwrap(f *jen.File, fromTypes []string, typName string) {
+	ptrTypName := "*" + typName
+
+	fun := f.Func().Params(
+		jen.Id("err").Id(ptrTypName),
+	).Id("Unwrap").Params().Error()
+	if len(fromTypes) == 0 {
+		fun.Block(
+			jen.Return(jen.Nil()),
+		)
+		return
+	}
+
+	fun.Block(
+		jen.Switch(jen.Id("err").Dot("Err").Assert(jen.Type())).Block(
+			jen.CaseFunc(
+				func(g *jen.Group) {
+					for _, typ := range fromTypes {
+						g.Id(typ)
+					}
+				},
+			).Block(
+				jen.Return(
+					jen.Id("err").Dot("Err"),
+				),
+			),
+			jen.Default().Block(
+				jen.Panic(jen.Lit("cannot construct error from this type")),
+			),
+		),
 	)
 }
