@@ -64,27 +64,39 @@ func walkFiles(cmd *cobra.Command, args []string) {
 			log.Fatal(err)
 		}
 
+		importMap := make(map[string]string)
+		for _, impt := range goFile.Imports {
+			if impt.Name != nil {
+				importMap[impt.Name.Name] = impt.Path.Value
+			} else {
+				// TODO: get the last section of Path
+				importMap[impt.Path.Value] = impt.Path.Value
+			}
+		}
+
 		types := []*impl.UnintializedErrorType{}
 		cmap := ast.NewCommentMap(fset, goFile, goFile.Comments)
 		for node, commentGroups := range cmap {
-			relatedComments := []*ast.Comment{}
+			comments := []*ast.Comment{}
+			related := false
 			for _, commentGroup := range commentGroups {
 				for _, comment := range commentGroup.List {
-					if strings.Contains(comment.Text, "+thaterror:") {
-						relatedComments = append(relatedComments, comment)
+					if strings.Contains(comment.Text, "+thaterror") {
+						related = true
 					}
+					comments = append(comments, comment)
 				}
 			}
 
-			if len(relatedComments) > 0 {
+			if related {
 				errType := &impl.UnintializedErrorType{
 					Node:     node,
-					Comments: relatedComments,
+					Comments: comments,
 				}
 				types = append(types, errType)
 			}
 		}
 
-		impl.Pkg(file, goFile.Name.Name, types, outputFileName)
+		impl.Pkg(file, goFile.Name.Name, importMap, types, outputFileName)
 	}
 }

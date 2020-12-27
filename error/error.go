@@ -11,20 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package impl
+package error
 
-import "go/ast"
-
-// UnintializedErrorType represents the raw ast items parsed from file
-type UnintializedErrorType struct {
-	Node     ast.Node
-	Comments []*ast.Comment
-}
-
-// Error represents all information about an error type
-type Error struct {
-	TypeName      string
-	ErrorTemplate string
-	Transparent   bool
-	WrapTypes     []string
-}
+// Anyhow represents any error
+type Anyhow error

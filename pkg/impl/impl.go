@@ -24,10 +24,13 @@ import (
 )
 
 const errDeclPattern = "+thaterror:error="
-const errFromPattern = "+thaterror:from="
+const errWrapPattern = "+thaterror:wrap="
+const multiLineErrDeclStart = "+thaterror:error:start"
+const multilineErrDeclEnd = "+thaterror:error:stop"
+const transparentPattern = "+thaterror:transparent"
 
 // Pkg generates error related functions for a pkg
-func Pkg(path string, pkgName string, types []*UnintializedErrorType, outputFileName string) {
+func Pkg(path string, pkgName string, importMap map[string]string, types []*UnintializedErrorType, outputFileName string) {
 	f := jen.NewFile(pkgName)
 
 	for _, typ := range types {
@@ -52,34 +55,56 @@ func generateTyp(f *jen.File, typ *UnintializedErrorType) {
 		log.Fatal("node is not a *ast.TypeSpec")
 	}
 
-	typName := errType.Name.Name
+	errImpl := &Error{
+		TypeName:      errType.Name.Name,
+		ErrorTemplate: "",
+		Transparent:   false,
+		WrapTypes:     []string{},
+	}
 
-	fromTypes := []string{}
+	multiLineTemplate := false
 	for _, comment := range typ.Comments {
 		comment := comment.Text
-
-		if index := strings.Index(comment, errDeclPattern); index != -1 {
+		if multiLineTemplate {
+			errImpl.ErrorTemplate += strings.Trim(comment, " /") + "\n"
+		} else if index := strings.Index(comment, errDeclPattern); index != -1 {
 			tmplContent := comment[index+len(errDeclPattern):]
-			generateErrorFunc(f, tmplContent, typName)
-		} else if index := strings.Index(comment, errFromPattern); index != -1 {
-			fromType := comment[index+len(errFromPattern):]
-			fromTypes = append(fromTypes, fromType)
+			errImpl.ErrorTemplate = tmplContent
+		} else if strings.Contains(comment, multiLineErrDeclStart) {
+			multiLineTemplate = true
+		} else if strings.Contains(comment, multilineErrDeclEnd) {
+			multiLineTemplate = false
+		} else if strings.Contains(comment, transparentPattern) {
+			errImpl.Transparent = true
+		} else if index := strings.Index(comment, errWrapPattern); index != -1 {
+			fromType := comment[index+len(errWrapPattern):]
+			errImpl.WrapTypes = append(errImpl.WrapTypes, fromType)
 		}
 	}
 
-	generateErrorFrom(f, fromTypes, typName)
-	generateErrorUnwrap(f, fromTypes, typName)
+	errImpl.impl(f)
 }
 
-func generateErrorFunc(f *jen.File, tmplContent string, typName string) {
-	ptrTypName := "*" + typName
+func (e *Error) impl(f *jen.File) {
+	if e.Transparent {
+		e.generateTransparentErrorFunc(f)
+	} else {
+		e.generateTemplateErrorFunc(f)
+	}
 
-	tmplName := typName + "ErrorTmpl"
+	e.generateErrorWrap(f)
+	e.generateErrorUnwrap(f)
+}
+
+func (e *Error) generateTemplateErrorFunc(f *jen.File) {
+	ptrTypName := "*" + e.TypeName
+
+	tmplName := e.TypeName + "ErrorTmpl"
 	f.Const().Defs(
 		jen.Id(tmplName).Op("=").
 			Qual("template", "Must").Call(
 			jen.Qual("template", "New").Call(jen.Lit(tmplName)).
-				Dot("Parse").Call(jen.Lit(tmplContent))),
+				Dot("Parse").Call(jen.Lit(e.ErrorTemplate))),
 	)
 
 	f.Func().Params(
@@ -97,42 +122,38 @@ func generateErrorFunc(f *jen.File, tmplContent string, typName string) {
 	)
 }
 
-func generateErrorFrom(f *jen.File, fromTypes []string, typName string) {
-	ptrTypName := "*" + typName
+func (e *Error) generateErrorWrap(f *jen.File) {
+	ptrTypName := "*" + e.TypeName
 
-	if len(fromTypes) == 0 {
+	if len(e.WrapTypes) == 0 {
 		return
 	}
 
-	f.Func().Id(typName + "From").Params(jen.Id("err").Error()).Id(ptrTypName).Block(
+	f.Func().Id(e.TypeName + "Wrap").Params(jen.Id("err").Error()).Id(ptrTypName).Block(
 		jen.Switch(jen.Id("err").Assert(jen.Type())).Block(
 			jen.CaseFunc(
-				func(g *jen.Group) {
-					for _, typ := range fromTypes {
-						g.Id(typ)
-					}
-				},
+				e.allWrapTypeCaseFunc(),
 			).Block(
 				jen.Return(
-					jen.Op("&").Id(typName).Values(jen.Dict{
+					jen.Op("&").Id(e.TypeName).Values(jen.Dict{
 						jen.Id("Err"): jen.Id("err"),
 					}),
 				),
 			),
 			jen.Default().Block(
-				jen.Panic(jen.Lit("cannot construct error from this type")),
+				jen.Panic(jen.Lit("unexpected error type")),
 			),
 		),
 	)
 }
 
-func generateErrorUnwrap(f *jen.File, fromTypes []string, typName string) {
-	ptrTypName := "*" + typName
+func (e *Error) generateErrorUnwrap(f *jen.File) {
+	ptrTypName := "*" + e.TypeName
 
 	fun := f.Func().Params(
 		jen.Id("err").Id(ptrTypName),
 	).Id("Unwrap").Params().Error()
-	if len(fromTypes) == 0 {
+	if len(e.WrapTypes) == 0 {
 		fun.Block(
 			jen.Return(jen.Nil()),
 		)
@@ -142,19 +163,24 @@ func generateErrorUnwrap(f *jen.File, fromTypes []string, typName string) {
 	fun.Block(
 		jen.Switch(jen.Id("err").Dot("Err").Assert(jen.Type())).Block(
 			jen.CaseFunc(
-				func(g *jen.Group) {
-					for _, typ := range fromTypes {
-						g.Id(typ)
-					}
-				},
+				e.allWrapTypeCaseFunc(),
 			).Block(
 				jen.Return(
 					jen.Id("err").Dot("Err"),
 				),
 			),
 			jen.Default().Block(
-				jen.Panic(jen.Lit("cannot construct error from this type")),
+				jen.Panic(jen.Lit("unexpected error type")),
 			),
 		),
+	)
+}
+
+func (e *Error) generateTransparentErrorFunc(f *jen.File) {
+	ptrTypName := "*" + e.TypeName
+	f.Func().Params(
+		jen.Id("err").Id(ptrTypName),
+	).Id("Error").Params().Error().Block(
+		jen.Return(jen.Id("err").Dot("Error").Call()),
 	)
 }
