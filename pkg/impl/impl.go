@@ -14,10 +14,12 @@
 package impl
 
 import (
-	"fmt"
+	"bufio"
 	"go/ast"
 	"go/token"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/dave/jennifer/jen"
@@ -38,7 +40,18 @@ func Pkg(path string, pkgName string, importMap map[string]string, types []*Unin
 		generateTyp(f, typ)
 	}
 
-	fmt.Printf("%#v", f)
+	path = filepath.Dir(path)
+
+	file, err := os.Create(path + "/zz_generated.thaterror.go")
+	if err != nil {
+		log.Fatalf("fail to open file %s", err)
+	}
+
+	w := bufio.NewWriter(file)
+	err = f.Render(w)
+	if err != nil {
+		log.Fatalf("fail to render %s", err)
+	}
 }
 
 func generateTyp(f *jen.File, typ *UnintializedErrorType) {
@@ -101,10 +114,10 @@ func (e *Error) generateTemplateErrorFunc(f *jen.File) {
 	ptrTypName := "*" + e.TypeName
 
 	tmplName := e.TypeName + "ErrorTmpl"
-	f.Const().Defs(
+	f.Var().Defs(
 		jen.Id(tmplName).Op("=").
-			Qual("template", "Must").Call(
-			jen.Qual("template", "New").Call(jen.Lit(tmplName)).
+			Qual("text/template", "Must").Call(
+			jen.Qual("text/template", "New").Call(jen.Lit(tmplName)).
 				Dot("Parse").Call(jen.Lit(e.ErrorTemplate))),
 	)
 

@@ -13,8 +13,18 @@
 
 package main
 
-import "github.com/YangKeao/thaterror/pkg/cmd"
+import (
+	"github.com/YangKeao/thaterror/pkg/cmd"
+	"github.com/spf13/cobra"
+)
 
 func main() {
-	cmd.RootCmd.Execute()
+	var rootCmd = &cobra.Command{
+		Use:   "thaterror [sub]",
+		Short: "thaterror is a linter and code generator for error handling",
+	}
+
+	rootCmd.AddCommand(cmd.GenerateCmd)
+	rootCmd.AddCommand(cmd.LintCmd)
+	rootCmd.Execute()
 }

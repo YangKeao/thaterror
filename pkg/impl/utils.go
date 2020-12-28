@@ -24,9 +24,21 @@ func (e *Error) allWrapTypeCaseFunc() func(g *jen.Group) {
 		for _, typ := range e.WrapTypes {
 			sections := strings.Split(typ, "\".")
 			if len(sections) > 1 {
-				pkg := sections[0][1:]
+				ptr := false
+
+				pkg := sections[0][:]
+				if pkg[0] == '*' {
+					ptr = true
+					pkg = pkg[1:]
+				}
+				pkg = pkg[1:]
 				typ := sections[1]
-				g.Qual(pkg, typ)
+
+				if ptr {
+					g.Op("*").Qual(pkg, typ)
+				} else {
+					g.Qual(pkg, typ)
+				}
 			} else {
 				g.Id(typ)
 			}
