@@ -14,7 +14,6 @@
 package impl
 
 import (
-	"bufio"
 	"go/ast"
 	"go/token"
 	"log"
@@ -47,8 +46,7 @@ func Pkg(path string, pkgName string, importMap map[string]string, types []*Unin
 		log.Fatalf("fail to open file %s", err)
 	}
 
-	w := bufio.NewWriter(file)
-	err = f.Render(w)
+	err = f.Render(file)
 	if err != nil {
 		log.Fatalf("fail to render %s", err)
 	}
