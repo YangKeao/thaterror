@@ -17,12 +17,11 @@ import (
 	"go/ast"
 	"go/token"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/YangKeao/thaterror/pkg/filemanager"
 	"github.com/dave/jennifer/jen"
-	"github.com/iancoleman/strcase"
 )
 
 const errDeclPattern = "+thaterror:error="
@@ -33,26 +32,17 @@ const transparentPattern = "+thaterror:transparent"
 
 // Pkg generates error related functions for a pkg
 func Pkg(path string, pkgName string, importMap map[string]string, types []*UnintializedErrorType, outputFileName string) {
-	f := jen.NewFile(pkgName)
+	f, err := filemanager.OpenFile(path, pkgName)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	for _, typ := range types {
-		generateTyp(f, typ)
-	}
-
-	path = filepath.Dir(path)
-
-	file, err := os.Create(path + "/zz_generated.thaterror.go")
-	if err != nil {
-		log.Fatalf("fail to open file %s", err)
-	}
-
-	err = f.Render(file)
-	if err != nil {
-		log.Fatalf("fail to render %s", err)
+		generateTyp(f, typ, filepath.Dir(path))
 	}
 }
 
-func generateTyp(f *jen.File, typ *UnintializedErrorType) {
+func generateTyp(f *jen.File, typ *UnintializedErrorType, path string) {
 	decl, ok := typ.Node.(*ast.GenDecl)
 	if !ok {
 		log.Fatal("node is not a *ast.GenDecl")
@@ -72,6 +62,7 @@ func generateTyp(f *jen.File, typ *UnintializedErrorType) {
 		ErrorTemplate: "",
 		Transparent:   false,
 		WrapTypes:     []string{},
+		Path:          path,
 	}
 
 	multiLineTemplate := false
@@ -104,8 +95,11 @@ func (e *Error) impl(f *jen.File) {
 		e.generateTemplateErrorFunc(f)
 	}
 
-	e.generateErrorWrap(f)
-	e.generateErrorUnwrap(f)
+	if len(e.WrapTypes) > 0 {
+		e.generateErrorWrapInterface(f)
+		e.generateErrorWrap(f)
+		e.generateErrorUnwrap(f)
+	}
 }
 
 func (e *Error) generateTemplateErrorFunc(f *jen.File) {
@@ -134,27 +128,38 @@ func (e *Error) generateTemplateErrorFunc(f *jen.File) {
 	)
 }
 
+func (e *Error) generateErrorWrapInterface(f *jen.File) {
+	f.Type().Id(e.getUnionName()).Interface(
+		jen.Id(e.getUnionFunctionName()).Params(),
+		jen.Error(),
+	)
+
+	for _, typ := range e.WrapTypes {
+		var err error
+		jenFile := f
+		path, typ := e.splitErrorWrapType(typ)
+		if len(path) != 0 {
+			// TODO: make it more flexible to get the pkg name but not the last element of filepath
+			jenFile, err = filemanager.OpenFile(path+"/error.go", filepath.Base(path))
+			if err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		jenFile.Func().Params(
+			jen.Id("err").Id(typ),
+		).Id(e.getUnionFunctionName()).Params().Block()
+	}
+}
+
 func (e *Error) generateErrorWrap(f *jen.File) {
 	ptrTypName := "*" + e.TypeName
 
-	if len(e.WrapTypes) == 0 {
-		return
-	}
-
-	f.Func().Id(strcase.ToLowerCamel(e.TypeName) + "Wrap").Params(jen.Id("err").Error()).Id(ptrTypName).Block(
-		jen.Switch(jen.Id("err").Assert(jen.Type())).Block(
-			jen.CaseFunc(
-				e.allWrapTypeCaseFunc(),
-			).Block(
-				jen.Return(
-					jen.Op("&").Id(e.TypeName).Values(jen.Dict{
-						jen.Id("Err"): jen.Id("err"),
-					}),
-				),
-			),
-			jen.Default().Block(
-				jen.Panic(jen.Lit("unexpected error type")),
-			),
+	f.Func().Id(e.TypeName + "Wrap").Params(jen.Id("err").Id(e.getUnionName())).Id(ptrTypName).Block(
+		jen.Return(
+			jen.Op("&").Id(e.TypeName).Values(jen.Dict{
+				jen.Id("Err"): jen.Id("err"),
+			}),
 		),
 	)
 }
@@ -165,25 +170,10 @@ func (e *Error) generateErrorUnwrap(f *jen.File) {
 	fun := f.Func().Params(
 		jen.Id("err").Id(ptrTypName),
 	).Id("Unwrap").Params().Error()
-	if len(e.WrapTypes) == 0 {
-		fun.Block(
-			jen.Return(jen.Nil()),
-		)
-		return
-	}
 
 	fun.Block(
-		jen.Switch(jen.Id("err").Dot("Err").Assert(jen.Type())).Block(
-			jen.CaseFunc(
-				e.allWrapTypeCaseFunc(),
-			).Block(
-				jen.Return(
-					jen.Id("err").Dot("Err"),
-				),
-			),
-			jen.Default().Block(
-				jen.Panic(jen.Lit("unexpected error type")),
-			),
+		jen.Return(
+			jen.Id("err").Dot("Err"),
 		),
 	)
 }
@@ -192,7 +182,7 @@ func (e *Error) generateTransparentErrorFunc(f *jen.File) {
 	ptrTypName := "*" + e.TypeName
 	f.Func().Params(
 		jen.Id("err").Id(ptrTypName),
-	).Id("Error").Params().Error().Block(
+	).Id("Error").Params().String().Block(
 		jen.Return(jen.Id("err").Dot("Error").Call()),
 	)
 }

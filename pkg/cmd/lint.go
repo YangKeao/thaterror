@@ -15,7 +15,6 @@ package cmd
 
 import (
 	"log"
-	"os"
 	"sync"
 
 	"github.com/YangKeao/thaterror/pkg/lint"
@@ -33,34 +32,27 @@ var LintCmd = &cobra.Command{
 }
 
 var (
-	lintPath   string
-	lintFilter string
-	lintSkip   string
+	lintFiles []string
+	lintSkips []string
 )
 
 func init() {
-	LintCmd.PersistentFlags().StringVar(&lintPath, "path", ".", "the root path of your project")
-	LintCmd.PersistentFlags().StringVar(&lintFilter, "filter", "**/*.go", "only files matching the pattern will be walked")
-	LintCmd.PersistentFlags().StringVar(&lintSkip, "skip", "**/zz_generated.*.go", "skip the files match this pattern")
+	LintCmd.PersistentFlags().StringSliceVar(&lintFiles, "files", []string{"./..."}, "only files matching the pattern will be walked")
+	LintCmd.PersistentFlags().StringSliceVar(&lintSkips, "skips", []string{"**/zz_generated.*.go", "**/*.pb.go"}, "skip the files match this pattern")
 }
 
 func lintCmd(cmd *cobra.Command, args []string) {
-	err := os.Chdir(generatePath)
-	if err != nil {
-		log.Fatal(err)
+	skipFiles := []string{}
+	for _, skipGlob := range lintSkips {
+		fs, err := zglob.Glob(skipGlob)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		skipFiles = append(skipFiles, fs...)
 	}
 
-	files, err := zglob.Glob(lintFilter)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	skipFiles, err := zglob.Glob(lintSkip)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	packages, err := dots.ResolvePackages(files, skipFiles)
+	packages, err := dots.ResolvePackages(lintFiles, skipFiles)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -16,19 +16,17 @@ package lint
 import (
 	"fmt"
 	"go/ast"
-	"go/importer"
 	"go/parser"
 	"go/token"
-	"go/types"
 	"log"
+	"strings"
 )
+
+const ignorePattern = "+thaterror:ignore"
 
 type Package struct {
 	fset  *token.FileSet
 	files map[string]*ast.File
-
-	TypesPkg  *types.Package
-	TypesInfo *types.Info
 }
 
 func LintPackage(filenames []string) {
@@ -46,20 +44,15 @@ func LintPackage(filenames []string) {
 			log.Fatal(err)
 		}
 		pkg.files[f] = astFile
-	}
 
-	config := &types.Config{
-		// By setting a no-op error reporter, the type checker does as much work as possible.
-		Error:       func(error) {},
-		Importer:    importer.ForCompiler(pkg.fset, "source", nil),
-		FakeImportC: true,
-	}
-
-	info := &types.Info{
-		Types:  make(map[ast.Expr]types.TypeAndValue),
-		Defs:   make(map[*ast.Ident]types.Object),
-		Uses:   make(map[*ast.Ident]types.Object),
-		Scopes: make(map[ast.Node]*types.Scope),
+		if astFile.Doc != nil {
+			for _, comment := range astFile.Doc.List {
+				if strings.Contains(comment.Text, ignorePattern) {
+					log.Printf("ignore pkg of file %s", f)
+					return
+				}
+			}
+		}
 	}
 
 	var files []*ast.File
@@ -67,13 +60,6 @@ func LintPackage(filenames []string) {
 		files = append(files, f)
 		break
 	}
-	typesPkg, err := config.Check(files[0].Name.Name, pkg.fset, files, info)
-	if err != nil {
-		// log.Fatal(err)
-	}
-
-	pkg.TypesPkg = typesPkg
-	pkg.TypesInfo = info
 
 	for path, file := range pkg.files {
 		pkg.lintFile(path, file)
@@ -103,20 +89,22 @@ func (walker *Walker) Visit(node ast.Node) ast.Visitor {
 }
 
 func (walker *Walker) checkFuncResult(fn *ast.FuncDecl) {
-	rawType := walker.TypesInfo.TypeOf(fn.Name)
+	if fn.Doc != nil {
+		for _, comment := range fn.Doc.List {
+			if strings.Contains(comment.Text, ignorePattern) {
+				return
+			}
+		}
+	}
 
-	fnType, ok := rawType.Underlying().(*types.Signature)
-	if !ok {
+	retTypes := fn.Type.Results
+	if retTypes == nil {
 		return
 	}
 
-	retTypes := fnType.Results()
-
-	for i := 0; i < retTypes.Len(); i++ {
-		nt, ok := retTypes.At(i).Type().(*types.Named)
-		if ok && isTypeError(nt) {
-			pos := fn.Pos()
-			log.Fatalf("%+v at %s:%+v shouldn't use `error` as a return type", fn.Name.Name, walker.Path, walker.fset.Position(pos))
+	for _, field := range retTypes.List {
+		if ident, ok := field.Type.(*ast.Ident); ok && ident.Name == "error" {
+			log.Fatalf("%+v at %+v shouldn't use `error` as a return type", fn.Name.Name, walker.fset.Position(fn.Pos()))
 		}
 	}
 }

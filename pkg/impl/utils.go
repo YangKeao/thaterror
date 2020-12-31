@@ -16,32 +16,25 @@ package impl
 import (
 	"strings"
 
-	"github.com/dave/jennifer/jen"
+	"github.com/iancoleman/strcase"
 )
 
-func (e *Error) allWrapTypeCaseFunc() func(g *jen.Group) {
-	return func(g *jen.Group) {
-		for _, typ := range e.WrapTypes {
-			sections := strings.Split(typ, "\".")
-			if len(sections) > 1 {
-				ptr := false
+func (e *Error) getUnionName() string {
+	return e.TypeName + "Wrap" + "Union"
+}
 
-				pkg := sections[0][:]
-				if pkg[0] == '*' {
-					ptr = true
-					pkg = pkg[1:]
-				}
-				pkg = pkg[1:]
-				typ := sections[1]
+func (e *Error) splitErrorWrapType(wrapType string) (string, string) {
+	sections := strings.Split(wrapType, "\".")
+	if len(sections) > 1 {
+		path := sections[0][1:]
+		typ := sections[1]
 
-				if ptr {
-					g.Op("*").Qual(pkg, typ)
-				} else {
-					g.Qual(pkg, typ)
-				}
-			} else {
-				g.Id(typ)
-			}
-		}
+		return path, typ
+	} else {
+		return "", sections[0]
 	}
+}
+
+func (e *Error) getUnionFunctionName() string {
+	return strcase.ToCamel(strings.ReplaceAll(e.Path, "/", "") + e.TypeName)
 }

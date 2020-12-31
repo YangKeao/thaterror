@@ -18,9 +18,9 @@ import (
 	"go/parser"
 	"go/token"
 	"log"
-	"os"
 	"strings"
 
+	"github.com/YangKeao/thaterror/pkg/filemanager"
 	"github.com/YangKeao/thaterror/pkg/impl"
 
 	zglob "github.com/mattn/go-zglob"
@@ -35,23 +35,16 @@ var GenerateCmd = &cobra.Command{
 }
 
 var (
-	generatePath   string
 	generateFilter string
 	outputFileName string
 )
 
 func init() {
-	GenerateCmd.PersistentFlags().StringVar(&generatePath, "path", ".", "the root path of your project")
 	GenerateCmd.PersistentFlags().StringVar(&generateFilter, "filter", "**/error.go", "only files matching the pattern will be walked")
 	GenerateCmd.PersistentFlags().StringVarP(&outputFileName, "output", "o", "zz_generated.thaterror.go", "the output filename of generated file")
 }
 
 func generateCmd(cmd *cobra.Command, args []string) {
-	err := os.Chdir(generatePath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	files, err := zglob.Glob(generateFilter)
 	if err != nil {
 		log.Fatal(err)
@@ -99,5 +92,10 @@ func generateCmd(cmd *cobra.Command, args []string) {
 		}
 
 		impl.Pkg(file, goFile.Name.Name, importMap, types, outputFileName)
+	}
+
+	err = filemanager.Render()
+	if err != nil {
+		log.Fatal(err)
 	}
 }

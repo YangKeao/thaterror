@@ -27,4 +27,5 @@ type Error struct {
 	ErrorTemplate string
 	Transparent   bool
 	WrapTypes     []string
+	Path          string
 }
