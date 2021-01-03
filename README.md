@@ -46,6 +46,11 @@ function. Only the listed types (in the annotation) can be passed into the
 `error` interface. With `+thaterror:error`, the error message is generated with
 the specified template, the `.` of which is the struct it self.
 
+## Implementation
+
+The implementation for `+thaterror:error` and `+thaterror:transparent` is quite
+straightforward
+
 ## Motivation
 
 Error handling in `Go` is always a problem. There are tons of articles and
