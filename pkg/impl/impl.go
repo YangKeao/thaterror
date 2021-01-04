@@ -169,11 +169,11 @@ func (e *Error) generateErrorUnwrap(f *jen.File) {
 
 	fun := f.Func().Params(
 		jen.Id("err").Id(ptrTypName),
-	).Id("Unwrap").Params().Error()
+	).Id("Unwrap").Params().Id(e.getUnionName())
 
 	fun.Block(
 		jen.Return(
-			jen.Id("err").Dot("Err"),
+			jen.Id("err").Dot("Err").Assert(jen.Id(e.getUnionName())),
 		),
 	)
 }

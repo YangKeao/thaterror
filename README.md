@@ -205,6 +205,29 @@ In `thaterror`, we use the same way to implement `+thaterror:wrap`. We will
 create an interface for the type which could `Wrap` other types, then we
 implement this interface for all these types.
 
+```go
+// +thaterror:wrap=*MissingTemplateName
+// +thaterror:wrap="pkg/commonerror".*IOError
+type Error struct {
+	Err error
+}
+```
+
+`thaterror` will generate an interface for it to conclude all possible wrapped errors:
+
+```go
+type ErrorWrapUnion interface {
+    PkgwebhookconfigError()
+    error
+}
+```
+
+And related type, e.g. "*IOError" will implement this function:
+
+```go
+func (err *IOError) PkgwebhookconfigError()                          {}
+```
+
 ## Install & Use
 
 `thaterror` hasn't prepared to be widely used. The documents and tests are not 
