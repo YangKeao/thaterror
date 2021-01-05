@@ -170,6 +170,22 @@ The manual page will describe all possible errors and how it occurs:
 There are hundreds of error numbers, which can be regarded as a "super union" of
 errors (and you can call it error universe 😄️).
 
+### C++
+
+There is no recommended way or standard way to handle error in C++. You can
+choose to use "throw and catch" exception without `throw` in the signature,
+which means the users will also fail to know all the possible error in a
+function. Or you can choose to use `std::expected` (not in standard yet) to get
+nearly the same error handling pattern like the `Rust` way. If you are building
+a c binding or love the old fashion way, error code is also a choice for C++
+programmers.
+
+### Conclusion
+
+After these examples, if we don't care about the control flow (the difference
+between throw and return), the sum type is nearly the only way to know the
+errors in a function. We need to simulate sum type in go.
+
 ## Implementation
 
 The implementation for `+thaterror:error` and `+thaterror:transparent` is quite
@@ -209,11 +225,12 @@ implement this interface for all these types.
 // +thaterror:wrap=*MissingTemplateName
 // +thaterror:wrap="pkg/commonerror".*IOError
 type Error struct {
-	Err error
+    Err error
 }
 ```
 
-`thaterror` will generate an interface for it to conclude all possible wrapped errors:
+`thaterror` will generate an interface for it to conclude all possible wrapped
+errors:
 
 ```go
 type ErrorWrapUnion interface {
@@ -228,12 +245,16 @@ And related type, e.g. "*IOError" will implement this function:
 func (err *IOError) PkgwebhookconfigError()                          {}
 ```
 
+However, this information will lose after `Unwrap`. We have to set the return
+type of `Unwrap` to `error` but not `ErrorWrapUnion`, because the function in Go
+is not `covariant` with the return value.
+
 ## Install & Use
 
-`thaterror` hasn't prepared to be widely used. The documents and tests are not 
-rich enough. You can install and read the help information to have a try. If 
-you have any suggestion on the error handling tools or lints, feel free to open
-an issue and help us to improve `thaterror`.
+`thaterror` hasn't prepared to be widely used. The documents and tests are not
+rich enough. You can install and read the help information to have a try. If you
+have any suggestion on the error handling tools or lints, feel free to open an
+issue and help us to improve `thaterror`.
 
 ## TODO List
 

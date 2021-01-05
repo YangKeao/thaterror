@@ -167,13 +167,14 @@ func (e *Error) generateErrorWrap(f *jen.File) {
 func (e *Error) generateErrorUnwrap(f *jen.File) {
 	ptrTypName := "*" + e.TypeName
 
+	// As the golang cannot covariant for the return value
 	fun := f.Func().Params(
 		jen.Id("err").Id(ptrTypName),
-	).Id("Unwrap").Params().Id(e.getUnionName())
+	).Id("Unwrap").Params().Error()
 
 	fun.Block(
 		jen.Return(
-			jen.Id("err").Dot("Err").Assert(jen.Id(e.getUnionName())),
+			jen.Id("err").Dot("Err"),
 		),
 	)
 }
